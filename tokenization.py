@@ -5,13 +5,23 @@ import string
 import json
 import time
 import re
-import os
+import os, sys
+
+#*********************************************************************************************************************
+# Format of index is doc_id:title count, text count, category count, external links count, references count, infobox count
+# Example : 34:t23x42c10e7r3i15, it means document with id 34 has this word 23 times in title, 42 times in text, 
+# 10 times in category, 7 times in external links, 3 times in references and 15 times in infobox
+# -->If word is not present in any section that section is not illustrated with 0 in index rather it was eliminated from index
+# to reduce size of index
+#   ---> We will change the value to 'term frequncy', which will be obtained by dividing number of occurences by total number
+# of terms in that section
+#*********************************************************************************************************************
 
 #*********************************************************************************************************************
 # Creting a folder 'index' to store all the indicies in it
 #*********************************************************************************************************************
-root = os.path.dirname(os.path.realpath(__file__))
-index_dir = os.path.join(root, "index")
+root_dir = os.path.dirname(os.path.realpath(__file__))
+index_dir = os.path.join(root_dir, "index")
 
 if not os.path.isdir(index_dir) :
     os.mkdir(index_dir)
@@ -20,9 +30,9 @@ if not os.path.isdir(index_dir) :
 # Global variables to store word count in documents, 'count' will store count of documents total processed and 
 # 'MAX_ALLOWED' will store number of documents allowed to get written in final index in one go 
 #*********************************************************************************************************************
-word_count = {}
+total_word_count = {}
 count = 0
-MAX_ALLOWED = 5000
+MAX_ALLOWED = 28694
 
 #*********************************************************************************************************************
 # Following dictionary will be used to create index files for words starting from each alphabet, in particular 
@@ -52,14 +62,14 @@ sp.close()
 
 def create_files( path ) :
     for k in json_file.keys() :
-        file_path = os.path.join(path, json_file[k])
+        file_path = os.path.join(path, json_file[k][:-4] + "txt")
         js = open(file_path, "w")
         json.dump({}, js)
         js.close()
 
-    special_json = os.path.join(path, 'special_json.json')
+    special_json = os.path.join(path, 'special_json.txt')
     js = open(special_json, "w")
-    json.dump({}, js)
+    # json.dump({}, js)
     js.close() 
 
 #************************************************************************************************************************
@@ -80,11 +90,13 @@ def remove_stopwords(data) :
         if( word.isalpha() ) :
             word = word.strip()
             word = word.translate(table)
-            try :
-                if stp[word.strip()] != 1 :
+            word = word.strip()
+            if len(word) > 2 :
+                try :
+                    if stp[word.strip()] != 1 :
+                        result.append(str(Stemmer.stem(word)).lower())
+                except KeyError :
                     result.append(str(Stemmer.stem(word)).lower())
-            except KeyError :
-                result.append(str(Stemmer.stem(word)).lower())
 
     return result
 
@@ -94,6 +106,10 @@ def remove_stopwords(data) :
 # --> Contractions are also perfomed on string passed as 'sent'(parameter), i.e., your=>you are, don't=>do not, etc.
 #*********************************************************************************************************************
 def tokenize_string( sent ) :
+
+    if len(sent) == 0 :
+        return []
+
     try :
         sent = contractions.fix(sent)
     except IndexError :
@@ -122,49 +138,178 @@ def count_words( text ) :
 # json file, as we are writing in json only after count % MAX_ALLOWED == 0, so it is possible that last fragment may 
 # be less than MAX_ALLOWED so it won't get written in that way, hence we have to write an auxillary function for it
 #*********************************************************************************************************************
-def write_remaining(include_text) :
+def write_remaining( ) :
 
-    global word_count, count
+    global total_word_count, count
 
-    if len(word_count) > 0 :
+    if len(total_word_count) > 0 :
         crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
 
         if not os.path.isdir(crr_index) :
             os.mkdir(crr_index) 
             create_files(crr_index) 
 
-        for k in word_count.keys() :
-            if(not include_text) :
-                js = "title_"
-            else :
-                js = ""
+        for k in total_word_count.keys() :
+            js = ""
             if k in json_file.keys() :
                 js += json_file[k]
             else :
                 js += special_json
 
+            js = js[:-4] + "txt"
             js = os.path.join(crr_index, js)
             
             jsf = open(js, 'w')
-            json.dump(word_count[k], jsf)
+            # json.dump(total_word_count[k], jsf)
+            for word in total_word_count[k].keys() :
+                jsf.write(total_word_count[k][word] + "\n")
             jsf.close()
-            word_count[k].clear()
+            total_word_count[k].clear()
+
+#*********************************************************************************************************************
+# Following function will filter out and do all the preprocessing(tokenization, stemming, case folding and removal of 
+# stopwords) on the words in categories
+#*********************************************************************************************************************
+def filter_categories( data ) :
+    
+    d_list = data.split("\n")
+    
+    if len(d_list) == 0 :
+        return []
+
+    cat_string = ( d_list[0].split("]]")[0] + " " )
+    i = 1
+    while i < len(d_list) :
+        if "[[Category:" in d_list[i] :
+            cat_string += (d_list[i].split("[[Category:")[1].split("]]")[0].strip() + " ")
+        i += 1
+
+    categories = tokenize_string(cat_string)
+    return categories
+
+#*********************************************************************************************************************
+# Following function will filter out and do all the preprocessing(tokenization, stemming, case folding and removal of 
+# stopwords) on the words in External links
+#*********************************************************************************************************************
+def filter_external_links( data ) :
+    if len(data) == 0 :
+        return []
+
+    link_string = ""
+    d_list = data.split("\n")
+    for i in range(len(d_list)) :
+        line = d_list[i].strip()
+        if len(line) == 0 :
+            continue
+        if "* [" in line or "*[" in line :
+            try :
+                temp = line.split("[")[1][:-1]
+            except IndexError :
+                print(line)
+                sys.exit()
+            # temp = d_list[i].split("[")[1][:-1]
+            temp = temp.split(" ")
+            for word in temp :
+                if "http" not in word :
+                    link_string += (word.strip() + " ")
+
+    link_tokens = tokenize_string(link_string)
+    return link_tokens
+
+#*********************************************************************************************************************
+# Following function will filter out and do all the preprocessing(tokenization, stemming, case folding and removal of 
+# stopwords) on the words in References
+#*********************************************************************************************************************
+def filter_references( data ) :
+    if len(data) == 0 :
+        return []
+
+    d_list = data.split("\n")
+    references_string = ""
+    references = []
+    for i in range(len(d_list)) :
+        temp = d_list[i].strip().lower()
+        if "{{DEFAULTSORT:" in temp or temp[0:2] == "==" and temp[-2:] == "==" :
+            break 
+        else :
+            if "reflist" not in temp :
+                references_string += temp 
+
+    references = tokenize_string(references_string)
+    return references
+
+#*********************************************************************************************************************
+# Following function will filter out and do all the preprocessing(tokenization, stemming, case folding and removal of 
+# stopwords) on the words in Infobox
+#*********************************************************************************************************************
+def filter_infobox_text( data ) :
+    if len(data) == 0 :
+        return [], []
+
+    d_list = data.split("\n")
+    info_string, text_string = "", ""
+    i = 0
+    while i < len(d_list) :
+        temp = d_list[i].strip()
+        if "{{Infobox" in temp :
+            # info_string += temp.split("{{Infobox")[1]
+            brace_open = 0
+            while True :
+                if "{{" in temp :
+                    brace_open += temp.count("{{")
+                if "}}" in temp :
+                    brace_open -= temp.count("}}")
+
+                if "=" in temp :
+                    info_string += temp.split("=")[1]
+                elif "{{Infobox" in temp :
+                    info_string += temp.split("{{Infobox")[1]
+                else :
+                    info_string += temp
+
+                if brace_open <= 0 :
+                    break ;
+
+                i += 1
+                if i < len(d_list) :
+                    temp = d_list[i]
+                else :
+                    break 
+        else :
+            text_string += temp 
+
+        i += 1
+
+    text = tokenize_string( text_string )
+    info = tokenize_string( info_string )
+    return info, text
+
+#*********************************************************************************************************************
+# Following function will calculate term frequency for passed term's data i.e.,  number of ocuucrence of that term in
+# document/section of document, and total number of terms in that 
+#*********************************************************************************************************************
+def term_frequency( occurence_count, total_terms ) :
+    ret = ""
+    try :
+        ret = str(round((occurence_count/total_terms), 4 ) )
+    except ZeroDivisionError : 
+        ret = "0.0"
+    return ret[2:]
 
 #*********************************************************************************************************************
 # Following is the driver function which will parse the XML file and call tokenize_string(), to get tokenized list of 
 # text and then call count_words() to count unique words then update the global dictionary, and if number of documents parsed % MAX_ALLOWED == 0, then 
 # dump whole dictionary in respective json file, and clear the dictionary
 #*********************************************************************************************************************
-def filter_words( filename, include_text ) :
+def filter_words( filename ) :
 
-    global word_count, count
+    global total_word_count, count
 
     tree = et.parse(filename)
     root = tree.getroot()
 
     count = 0
-    pages = []
-    subtags = {}
+    docID_title = ""
 
     for child in root :
         ind = child.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
@@ -173,17 +318,18 @@ def filter_words( filename, include_text ) :
             start = time.time()
             count += 1
             data = {}
-            t = ""
+            title = ""
             for sch in child :
                 ind = sch.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
                 sc = sch.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :]
                 sc.strip()
                 if(sc == 'title') :
-                    t = str(sch.text)
-                    if(len(t) > 0 ) :
-                        t = tokenize_string(t)
+                    title = str(sch.text)
+                    docID_title += ( str(count) + ":" + title + "\n")
+                    if(len(title) > 0 ) :
+                        title = tokenize_string(title)
                     else :
-                        t = []
+                        title = []
 
                 
                 elif(include_text) :
@@ -193,27 +339,137 @@ def filter_words( filename, include_text ) :
                             sc = schh.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :].strip()
                             if sc == 'text' :
                                 text = str(schh.text)
-                                if(len(text) > 0 ) :
-                                    tokenize_s = time.time()
-                                    text = tokenize_string(text)
-                                    tokenize_e = time.time()
+                                
+                                #Fetching out category from text corpus
+                                text = text.split("[[Category:")
+                                if len(text) > 1 and len(text[1]) > 0 :
+                                    category = text[1]
                                 else :
-                                    text =[]
-                        t.extend(text)
+                                    category = ""
+                                text = text[0]
+                                category = filter_categories(category)
+
+                                #Fetching out reference from text corpus
+                                text = text.split("==External links==")
+                                if len(text) > 1 and len(text[1]) > 0 :
+                                    e_links = text[1]
+                                else :
+                                    e_links = ""
+                                text = text[0]
+                                e_links = filter_external_links(e_links)
+
+                                #Fetching out reference from text corpus
+                                text = text.split("==References==")
+                                if len(text) > 1 and len(text[1]) > 0 :
+                                    references = text[1]
+                                else :
+                                    references = ""
+                                text = text[0]
+                                references = filter_references(references)
+
+                                #Filtering and tokenizing infobox and text part
+                                infobox, text = filter_infobox_text(text)
+
+            title_count = count_words(title)
+            text_count = count_words(text)
+            infobox_count = count_words(infobox)
+            references_count = count_words(references)
+            e_links_count = count_words(e_links)
+            category_count = count_words(category)
+
+            title_total = len(title_count)
+            text_total = len(text_count)
+            infobox_total = len(infobox_count)
+            references_total = len(references_count)
+            e_links_total = len(e_links_count)
+            category_total = len(category_count)
             
-            count_s = time.time()
-            doc_word_count = count_words(t)
-            count_e = time.time()
-            
-            for word in doc_word_count.keys() :
-                if word_count.get(word[0]) :
-                    if word_count[word[0]].get(word) :
-                        word_count[word[0]][word] += (", " + str(count) + ":" + str(doc_word_count[word]) )
-                    else :
-                        word_count[word[0]][word] = str(str(count) + ":" + str(doc_word_count[word]))
+            vocabulary = set( list(title_count.keys()) + list(text_count.keys()) + list(infobox_count.keys())
+                              + list(references_count.keys()) + list(e_links_count.keys()) + list(category_count.keys()) )
+
+            for word in vocabulary :
+                string = ""
+                
+                #For title part
+                string += "t"
+                try :
+                    temp = title_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, title_total)
+                if temp != "0" :
+                    string += temp
                 else :
-                    word_count[word[0]] = {}
-                    word_count[word[0]][word] = str(str(count) + ":" + str(doc_word_count[word]) )
+                    string = string[:-1]
+
+                #For text part
+                string += "x"
+                try :
+                    temp = text_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, text_total)
+                if temp != "0" :
+                    string += temp
+                else :
+                    string = string[:-1]
+
+                #For category part
+                string += "c"
+                try :
+                    temp = category_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, category_total)
+                if temp != "0" :
+                    string += temp
+                else :
+                    string = string[:-1]
+
+                #For external links part
+                string += "e"
+                try :
+                    temp = e_links_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, e_links_total)
+                if temp != "0" :
+                    string += temp
+                else :
+                    string = string[:-1]
+
+                #For references part
+                string += "r"
+                try :
+                    temp = references_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, references_total)
+                if temp != "0" :
+                    string += temp
+                else :
+                    string = string[:-1]
+
+                #For infobox part
+                string += "i"
+                try :
+                    temp = infobox_count[word] 
+                except KeyError :
+                    temp = 0
+                temp = term_frequency(temp, infobox_total)
+                if temp != "0" :
+                    string += temp
+                else :
+                    string = string[:-1]
+
+                if total_word_count.get(word[0]) :
+                    if total_word_count[word[0]].get(word) :
+                        total_word_count[word[0]][word] += (", " + str(count) + ":" + string )
+                    else :
+                        total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string)
+                else :
+                    total_word_count[word[0]] = {}
+                    total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string )
 
             if count % MAX_ALLOWED == 0 :
                 write_time_s = time.time()
@@ -223,24 +479,27 @@ def filter_words( filename, include_text ) :
                     os.mkdir(crr_index) 
                     create_files(crr_index) 
 
-                for k in word_count.keys() :
-                    if(not include_text) :
-                        js = "title_"
-                    else :
-                        js = ""
+                for k in total_word_count.keys() :
+                    js = ""
                     if k in json_file.keys() :
                         js += json_file[k]
                     else :
                         js += special_json
-
+                    js = js[:-4] + "txt"
                     js = os.path.join(crr_index, js)
                     
                     jsf = open(js, 'w')
-                    json.dump(word_count[k], jsf)
+                    # json.dump(total_word_count[k], jsf)
+                    for word in total_word_count[k].keys() :
+                        jsf.write(total_word_count[k][word] + "\n")
                     jsf.close()
-                    word_count[k].clear()
+                    total_word_count[k].clear()
                 write_time_e = time.time()
                 print("Time taken to write : ", write_time_e - write_time_s )
+    ID_title_map = os.path.join(root_dir, "id_to_title.txt")
+    idt = open(ID_title_map, "w")
+    idt.write(docID_title)
+    idt.close()
 
     print("Total number of pages are : ", count)
 
@@ -248,7 +507,7 @@ if __name__ == '__main__' :
 
     include_text = True
     start = time.time()
-    filter_words("phase_1.xml", include_text)
-    write_remaining(include_text)
+    filter_words("phase_1.xml")
+    write_remaining()
     end = time.time()
     print("Time taken : ", end - start)
