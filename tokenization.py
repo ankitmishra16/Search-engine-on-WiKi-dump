@@ -32,7 +32,7 @@ if not os.path.isdir(index_dir) :
 #*********************************************************************************************************************
 total_word_count = {}
 count = 0
-MAX_ALLOWED = 28694
+MAX_ALLOWED = 28700
 
 #*********************************************************************************************************************
 # Following dictionary will be used to create index files for words starting from each alphabet, in particular 
@@ -49,7 +49,7 @@ special_json = 'special_json.json'
 #************************************************************************************************************************
 #initialising stopword's dictionary using stopwords.txt file
 #************************************************************************************************************************
-sp = open('stopwords.txt', 'r')
+sp = open('stopwords_1.txt', 'r')
 stp = {}
 for word in sp :
     stp[word.strip()] = 1
@@ -143,7 +143,8 @@ def write_remaining( ) :
     global total_word_count, count
 
     if len(total_word_count) > 0 :
-        crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
+        # crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
+        crr_index = index_dir
 
         if not os.path.isdir(crr_index) :
             os.mkdir(crr_index) 
@@ -294,7 +295,9 @@ def term_frequency( occurence_count, total_terms ) :
         ret = str(round((occurence_count/total_terms), 4 ) )
     except ZeroDivisionError : 
         ret = "0.0"
-    return ret[2:]
+
+    ret = ret[ret.index(".") + 1 :]
+    return ret
 
 #*********************************************************************************************************************
 # Following is the driver function which will parse the XML file and call tokenize_string(), to get tokenized list of 
@@ -473,7 +476,8 @@ def filter_words( filename ) :
 
             if count % MAX_ALLOWED == 0 :
                 write_time_s = time.time()
-                crr_index = os.path.join(index_dir, str(count//MAX_ALLOWED))
+                # crr_index = os.path.join(index_dir, str(count//MAX_ALLOWED))
+                crr_index = index_dir
 
                 if not os.path.isdir(crr_index) :
                     os.mkdir(crr_index) 
