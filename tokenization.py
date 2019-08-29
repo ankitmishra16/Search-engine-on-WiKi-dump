@@ -1,8 +1,6 @@
 import xml.etree.ElementTree as et
 import Stemmer
-import contractions
 import string
-import json
 import time
 import re
 import os, sys
@@ -20,11 +18,8 @@ import os, sys
 #*********************************************************************************************************************
 # Creting a folder 'index' to store all the indicies in it
 #*********************************************************************************************************************
-root_dir = os.path.dirname(os.path.realpath(__file__))
-index_dir = os.path.join(root_dir, "index")
-
-if not os.path.isdir(index_dir) :
-    os.mkdir(index_dir)
+# root_dir = os.path.dirname(os.path.realpath(__file__))
+index_dir = ""
 
 #*********************************************************************************************************************
 # Global variables to store word count in documents, 'count' will store count of documents total processed and 
@@ -49,7 +44,7 @@ special_json = 'special_json.json'
 #************************************************************************************************************************
 #initialising stopword's dictionary using stopwords.txt file
 #************************************************************************************************************************
-sp = open('stopwords_1.txt', 'r')
+sp = open('stopwords.txt', 'r')
 stp = {}
 for word in sp :
     stp[word.strip()] = 1
@@ -109,11 +104,6 @@ def tokenize_string( sent ) :
 
     if len(sent) == 0 :
         return []
-
-    try :
-        sent = contractions.fix(sent)
-    except IndexError :
-        sent = sent
 
     sent = tokenize(sent)
     result = remove_stopwords(sent)
@@ -335,43 +325,42 @@ def filter_words( filename ) :
                         title = []
 
                 
-                elif(include_text) :
-                    if(sc == 'revision' ) :
-                        for schh in sch :
-                            ind = schh.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
-                            sc = schh.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :].strip()
-                            if sc == 'text' :
-                                text = str(schh.text)
-                                
-                                #Fetching out category from text corpus
-                                text = text.split("[[Category:")
-                                if len(text) > 1 and len(text[1]) > 0 :
-                                    category = text[1]
-                                else :
-                                    category = ""
-                                text = text[0]
-                                category = filter_categories(category)
+                elif(sc == 'revision' ) :
+                    for schh in sch :
+                        ind = schh.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
+                        sc = schh.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :].strip()
+                        if sc == 'text' :
+                            text = str(schh.text)
+                            
+                            #Fetching out category from text corpus
+                            text = text.split("[[Category:")
+                            if len(text) > 1 and len(text[1]) > 0 :
+                                category = text[1]
+                            else :
+                                category = ""
+                            text = text[0]
+                            category = filter_categories(category)
 
-                                #Fetching out reference from text corpus
-                                text = text.split("==External links==")
-                                if len(text) > 1 and len(text[1]) > 0 :
-                                    e_links = text[1]
-                                else :
-                                    e_links = ""
-                                text = text[0]
-                                e_links = filter_external_links(e_links)
+                            #Fetching out reference from text corpus
+                            text = text.split("==External links==")
+                            if len(text) > 1 and len(text[1]) > 0 :
+                                e_links = text[1]
+                            else :
+                                e_links = ""
+                            text = text[0]
+                            e_links = filter_external_links(e_links)
 
-                                #Fetching out reference from text corpus
-                                text = text.split("==References==")
-                                if len(text) > 1 and len(text[1]) > 0 :
-                                    references = text[1]
-                                else :
-                                    references = ""
-                                text = text[0]
-                                references = filter_references(references)
+                            #Fetching out reference from text corpus
+                            text = text.split("==References==")
+                            if len(text) > 1 and len(text[1]) > 0 :
+                                references = text[1]
+                            else :
+                                references = ""
+                            text = text[0]
+                            references = filter_references(references)
 
-                                #Filtering and tokenizing infobox and text part
-                                infobox, text = filter_infobox_text(text)
+                            #Filtering and tokenizing infobox and text part
+                            infobox, text = filter_infobox_text(text)
 
             title_count = count_words(title)
             text_count = count_words(text)
@@ -499,19 +488,28 @@ def filter_words( filename ) :
                     jsf.close()
                     total_word_count[k].clear()
                 write_time_e = time.time()
-                print("Time taken to write : ", write_time_e - write_time_s )
-    ID_title_map = os.path.join(root_dir, "id_to_title.txt")
+                # print("Time taken to write : ", write_time_e - write_time_s )
+    ID_title_map = os.path.join(index_dir, "id_to_title.txt")
     idt = open(ID_title_map, "w")
     idt.write(docID_title)
     idt.close()
 
-    print("Total number of pages are : ", count)
+    # print("Total number of pages are : ", count)
 
-if __name__ == '__main__' :
+def main() :
+    global index_dir
+    wiki_dump = sys.argv[1]
+    index_dir = sys.argv[2]
+    
+    if not os.path.isdir(index_dir) :
+        os.mkdir(index_dir)
 
     include_text = True
     start = time.time()
-    filter_words("phase_1.xml")
+    filter_words(wiki_dump)
     write_remaining()
     end = time.time()
     print("Time taken : ", end - start)
+
+if __name__ == '__main__' :
+    main()

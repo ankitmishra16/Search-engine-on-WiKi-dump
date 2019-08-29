@@ -279,8 +279,9 @@ def search(path_to_index, queries):
         for i in range(count) : 
             doc_IDs.append(final_rel_doc[final_rel_l[i]])
 
+        id_to_title = os.path.join(path_to_index, "id_to_title.txt")
         for ids in doc_IDs :
-            line = linecache.getline("id_to_title.txt", int(ids)).strip()
+            line = linecache.getline(id_to_title, int(ids)).strip()
             temp_output.append(line[line.index(":") + 1 :])
 
         final_output.append(temp_output)
