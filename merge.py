@@ -117,8 +117,8 @@ def merge_files( iter_count, index_dir ) :
 		fp.close()
 		# print("For alphabet '", a, "' merging is done!!!!" )
 
-if __name__ == "__main__" :
-	s = time.time()
-	merge_files(3, "./index_latest" )
-	e = time.time()
-	print("Time taken : ", e - s)
+# if __name__ == "__main__" :
+# 	s = time.time()
+# 	merge_files(3, "./index" )
+# 	e = time.time()
+# 	print("Time taken : ", e - s)
