@@ -1,6 +1,7 @@
 import sys, re, os
 from tokenization import tokenize_string 
 import linecache
+import math
 
 path_to_index = ""
 field_multiplier = 11
@@ -9,18 +10,23 @@ field_multiplier = 11
 # Following dictionary will be used to create index files for words starting from each alphabet, in particular 
 # directory, so that it can be easily accessed just by alphabet
 #*********************************************************************************************************************
-index_file = {'a' : 'a_index.json', 'b' : 'b_index.json', 'c' : 'c_index.json', 'd' : 'd_index.json', 'e' : 'e_index.json',
-             'f' : 'f_index.json', 'g' : 'g_index.json', 'h' : 'h_index.json', 'i' : 'i_index.json', 'j' : 'j_index.json',
-             'h' : 'h_index.json', 'i' : 'i_index.json', 'j' : 'j_index.json', 'k' : 'k_index.json', 'l' : 'l_index.json',
-             'm' : 'm_index.json', 'n' : 'n_index.json', 'o' : 'o_index.json', 'p' : 'p_index.json', 'q' : 'q_index.json',
-             'r' : 'r_index.json', 's' : 's_index.json', 't' : 't_index.json', 'u' : 'u_index.json', 'v' : 'v_index.json',
-             'w' : 'w_index.json', 'x' : 'x_index.json', 'y' : 'y_index.json', 'z' : 'z_index.json' }
-special_index = 'special_json.json'
+index_file = {'a' : 'a_index.txt', 'b' : 'b_index.txt', 'c' : 'c_index.txt', 'd' : 'd_index.txt', 'e' : 'e_index.txt',
+             'f' : 'f_index.txt', 'g' : 'g_index.txt', 'h' : 'h_index.txt', 'i' : 'i_index.txt', 'j' : 'j_index.txt',
+             'h' : 'h_index.txt', 'i' : 'i_index.txt', 'j' : 'j_index.txt', 'k' : 'k_index.txt', 'l' : 'l_index.txt',
+             'm' : 'm_index.txt', 'n' : 'n_index.txt', 'o' : 'o_index.txt', 'p' : 'p_index.txt', 'q' : 'q_index.txt',
+             'r' : 'r_index.txt', 's' : 's_index.txt', 't' : 't_index.txt', 'u' : 'u_index.txt', 'v' : 'v_index.txt',
+             'w' : 'w_index.txt', 'x' : 'x_index.txt', 'y' : 'y_index.txt', 'z' : 'z_index.txt' }
+special_index = "special_index.txt"
 
 #********************************************************************************************************************
 # Following dictionary will store weight for each section indexing on their starting alphabet
 #********************************************************************************************************************
 section_weight = { "t" : 10, "x" : 5, "C" : 8, "e" : 6, "r" : 7, "i" : 9}
+
+#*******************************************************************************************************************
+# Following global variable will store total number of documents in the corpus, will be used to calculate IDF
+#*******************************************************************************************************************
+total_num_docs = ""
 
 def read_file(testfile):
     with open(testfile, 'r') as file:
@@ -48,7 +54,7 @@ def get_field_value( value, field ) :
         temp = value.split("i")
         value = temp[0]
         if field == "i" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
@@ -56,7 +62,7 @@ def get_field_value( value, field ) :
         temp = value.split("r")
         value = temp[0]
         if field == "r" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
@@ -64,7 +70,7 @@ def get_field_value( value, field ) :
         temp = value.split("e")
         value = temp[0]
         if field == "e" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
@@ -72,7 +78,7 @@ def get_field_value( value, field ) :
         temp = value.split("c")
         value = temp[0]
         if field == "c" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
@@ -80,7 +86,7 @@ def get_field_value( value, field ) :
         temp = value.split("x")
         value = temp[0]
         if field == "x" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
@@ -88,24 +94,25 @@ def get_field_value( value, field ) :
         temp = value.split("t")
         value = temp[0]
         if field == "t" :
-            return temp[1] * field_multiplier
+            return math.log10(temp[1] * field_multiplier)
         else :
             score += (int(temp[1]) * section_weight["i"])
 
     if field == "a" :
-        return score
+        return math.log10(score)
 
 #*******************************************************************************************************************
 # Following function will return relevance dictionary for the given field and posting list
 #********************************************************************************************************************
-def relevance_dictionary( posting, field ) :
+def relevance_dictionary( posting, field, word_weight ) :
     posting_values = posting.split(", ")
     ret = {}
+    idf = math.log(total_num_docs//len(posting_values))
 
     for value in posting_values :
         doc = value[:value.index(":")]
         value = value[value.index(":") + 1 :]
-        ret[doc] = get_field_value(value, field)
+        ret[doc] = get_field_value(value, field) * word_weight * idf
 
     return ret
 
@@ -119,6 +126,44 @@ def merge_dicts( org, temp ) :
         else :
             org[k] = temp[k]
     return org
+
+#******************************************************************************************************************
+# Following function will perform external binary search on the offset file, whose address id passed as 'filename'
+# parameter we will open file count lines and then will perform binary search on the file
+#******************************************************************************************************************
+def binary_search(filename, search_words) :
+    
+    ret = []
+
+    fp = open(filename, "r")
+    no_lines = len(fp.readlines())
+    fp.close()
+    for search_word in search_words :
+        s = 1
+        e = no_lines 
+        ret_no = ""
+
+        while s < e :
+            mid = ((s + e) // 2)
+            line = linecache.getline(filename, mid)
+            word = line[:line.index(":")]
+            if word == search_word :
+                ret_no = line[line.index(":") + 1 : ]
+                break
+            elif word < search_word :
+                s = mid
+            elif word > search_word :
+                e = mid
+
+        if s == e :
+            line = linecache.getline(filename, s)
+            word = line[:line.index(":")]
+            if word == search_word :
+                ret_no = line[line.index(":") + 1 : ]
+
+        ret.append(ret_no)
+
+    return ret
 
 #********************************************************************************************************************
 # Following function will be called for fecthing out posting list, it should return a dictionary indexed on document 
@@ -134,16 +179,22 @@ def return_postings(query, field) :
     #############################################################################################
     # To segregate words in query in alphabet wise
     #############################################################################################
+    query_word_weight = {}
     for word in query_words :
         if word[0] in alpha_words.keys() :
             alpha_words[word[0]].append(word)
         else :
             alpha_words[word[0]] = [word]
 
+        if word in query_word_weight.keys() :
+            query_word_weight[word] += 1
+        else :
+            query_word_weight[word] = 1
+
     #############################################################################################
     # Following lines will open files using alphabets in query words(first alphabet), and then
-    # search for wards starting with same alphabet in respective file, by opening that file only
-    # once
+    # search for words starting with same alphabet as of file opened respective file, by opening 
+    # that file only once
     #############################################################################################
     for alphabet in alpha_words.keys() :
         if alphabet in index_file.keys() :
@@ -151,38 +202,22 @@ def return_postings(query, field) :
         else :
             filename = special_index
 
-        filename = filename[:-4] + "txt"
         filename = os.path.join(path_to_index, filename)
-        file = open(filename, "r")
-        alphabetwise_query_word = set(alpha_words[alphabet])
-        for line in file :
-            if len(alphabetwise_query_word) == 0 :
-                break ;
-            word = line[:line.index("--->")]
+        alphabetwise_query_words = set(alpha_words[alphabet])
+        line_numbers = binary_search(filename, alphabetwise_query_words)
+
+        i = 0
+        for line_n in line_numbers :
+            if line_n == "" :
+                continue
+            line_n = int(line_n)
+            line = linecache.getline(filename, line_n)
             posting = line[line.index(">") + 1 :]
-            if word in alphabetwise_query_word :
-                temp_dict = relevance_dictionary(posting, field)
-                doc_rel_dict = merge_dicts(doc_rel_dict, temp_dict)
-                alphabetwise_query_word.remove(word)
-        file.close()
+            temp_dict = relevance_dictionary(posting, field, query_word_weight[alphabetwise_query_words[i]])
+            doc_rel_dict = merge_dicts(doc_rel_dict, temp_dict)
+            i += 1
 
     return doc_rel_dict
-    # rel_doc = {}
-    # rel_doc_l = []
-    # for k in doc_rel_dict.keys() :
-    #     rel_doc[doc_rel_dict[k]] = k
-    #     rel_doc_l.append(doc_rel_dict[k])
-
-    # doc_rel_l.sort()
-    # count = min(15, len(doc_rel_dict))
-    # for i in range(count) :
-    #     doc_IDs.append(rel_doc[rel_doc_l[i]])
-
-    # for ids in doc_IDs :
-    #     line = linecache.getline("id_to_title.txt", ids).strip()
-    #     titles.append(line[line.index(":") + 1 :])
-
-    # return titles
 
 #********************************************************************************************************************
 # Following function will be first function to be called for search, it will further check if it is feild query or
@@ -274,7 +309,7 @@ def search(path_to_index, queries):
 
         final_rel_l.sort()
         final_rel_l.reverse()
-        count = min(15, len(final_rel_l))
+        count = min(10, len(final_rel_l))
         doc_IDs = []
         for i in range(count) : 
             doc_IDs.append(final_rel_doc[final_rel_l[i]])
@@ -291,12 +326,15 @@ def search(path_to_index, queries):
 
 
 def main():
-    global path_to_index
+    global path_to_index, total_num_docs
     path_to_index = sys.argv[1]
     testfile = sys.argv[2]
     path_to_output = sys.argv[3]
 
     queries = read_file(testfile)
+    fp = open("total_docs.txt", "r")
+    total_num_docs = int(fp.readline().strip())
+    fp.close()
     outputs = search(path_to_index, queries)
     write_file(outputs, path_to_output)
 
