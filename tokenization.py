@@ -1,9 +1,11 @@
-import xml.etree.ElementTree as et
-import Stemmer
+# import xml.etree.ElementTree as et
+import xml.sax.handler
+import Stemmer, merge
 import string
 import time
 import re
 import os, sys
+from collections import Counter
 
 #*********************************************************************************************************************
 # Format of index is doc_id:title count, text count, category count, external links count, references count, infobox count
@@ -16,10 +18,16 @@ import os, sys
 #*********************************************************************************************************************
 
 #*********************************************************************************************************************
-# Creting a folder 'index' to store all the indicies in it
+# index_dir : global variable to store index folder's directory address
+# docID_title : string which will store docID to title mapping
+# fp_id_title : file pointer to the file having id to title mapping, initialised as string without any reason will 
+#               will update it later in main() and then will use in createIndex()
+# nod : number of documents in the file
 #*********************************************************************************************************************
-# root_dir = os.path.dirname(os.path.realpath(__file__))
 index_dir = ""
+docID_title = ""
+fp_id_title = ""
+nod = 0
 
 #*********************************************************************************************************************
 # Global variables to store word count in documents, 'count' will store count of documents total processed and 
@@ -27,7 +35,7 @@ index_dir = ""
 #*********************************************************************************************************************
 total_word_count = {}
 count = 0
-MAX_ALLOWED = 28700
+MAX_ALLOWED = 10000
 
 #*********************************************************************************************************************
 # Following dictionary will be used to create index files for words starting from each alphabet, in particular 
@@ -39,7 +47,7 @@ json_file = {'a' : 'a_index.json', 'b' : 'b_index.json', 'c' : 'c_index.json', '
              'm' : 'm_index.json', 'n' : 'n_index.json', 'o' : 'o_index.json', 'p' : 'p_index.json', 'q' : 'q_index.json',
              'r' : 'r_index.json', 's' : 's_index.json', 't' : 't_index.json', 'u' : 'u_index.json', 'v' : 'v_index.json',
              'w' : 'w_index.json', 'x' : 'x_index.json', 'y' : 'y_index.json', 'z' : 'z_index.json' }
-special_json = 'special_json.json'
+special_json = 'special_index.json'
 
 #************************************************************************************************************************
 #initialising stopword's dictionary using stopwords.txt file
@@ -50,6 +58,37 @@ for word in sp :
     stp[word.strip()] = 1
 sp.close()  
 
+class WikiHandler(xml.sax.handler.ContentHandler):
+    def __init__(self) :
+        self.title = False
+        self.text = False
+        self.text_s = ""
+        self.title_s = ""
+        
+    def startElement(self, name, attributes ) :
+        global nod
+        if name == "title" :
+            self.title = True
+            nod += 1
+        elif name == "text" :
+            self.text = True
+    
+    def characters(self, data) :
+        if self.title :
+            self.title_s += data
+        elif self.text :
+            self.text_s += data
+        
+    def endElement(self, name) :
+        if self.title :
+            self.title = False
+        elif self.text :
+            self.text = False
+            createIndex(self.title_s, self.text_s)
+            self.title_s = ""
+            self.text_s = ""
+
+
 #*********************************************************************************************************************
 # Following function will be used to create files for each alphabet and special characters, this function will be 
 # called only once, whenever any directory is created
@@ -59,7 +98,7 @@ def create_files( path ) :
     for k in json_file.keys() :
         file_path = os.path.join(path, json_file[k][:-4] + "txt")
         js = open(file_path, "w")
-        json.dump({}, js)
+        # json.dump({}, js)
         js.close()
 
     special_json = os.path.join(path, 'special_json.txt')
@@ -79,6 +118,7 @@ def tokenize(data):
 # also done
 #************************************************************************************************************************
 def remove_stopwords(data) :
+    # stemmer = Stemmer.Stemmer('english')
     table = str.maketrans('', '', string.punctuation)
     result = []
     for word in data :
@@ -90,8 +130,10 @@ def remove_stopwords(data) :
                 try :
                     if stp[word.strip()] != 1 :
                         result.append(str(Stemmer.stem(word)).lower())
+                        # result.append(str(stemmer.stemWord(word)).lower())
                 except KeyError :
                     result.append(str(Stemmer.stem(word)).lower())
+                    # result.append(str(stemmer.stemWord(word)).lower())
 
     return result
 
@@ -133,8 +175,8 @@ def write_remaining( ) :
     global total_word_count, count
 
     if len(total_word_count) > 0 :
-        # crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
-        crr_index = index_dir
+        crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
+        # crr_index = index_dir
 
         if not os.path.isdir(crr_index) :
             os.mkdir(crr_index) 
@@ -289,11 +331,197 @@ def term_frequency( occurence_count, total_terms ) :
     ret = ret[ret.index(".") + 1 :]
     return ret
 
+#---------------------------------------------------------------------------------------------------------------------
+# TO be made global :
+# DocID_title : string which will hold docid to title mapping to be used in search results
+# category, e_links, reference, infobox
+# count should be set zero when making a function call to read XML file
+#---------------------------------------------------------------------------------------------------------------------
+
 #*********************************************************************************************************************
-# Following is the driver function which will parse the XML file and call tokenize_string(), to get tokenized list of 
-# text and then call count_words() to count unique words then update the global dictionary, and if number of documents parsed % MAX_ALLOWED == 0, then 
-# dump whole dictionary in respective json file, and clear the dictionary
+# Following function will be called after every page is appeared in file parser(i.e., endElement() in wikiHandler class)
+# and will create index every time after number of files cross some threshould value
 #*********************************************************************************************************************
+def createIndex( title, text ) :
+
+    global total_word_count, count, docID_title, fp_id_title
+
+    count += 1
+    # print("Doc number", count, "Title passed : ", title)
+    docID_title = ( str(count) + ":" + title + "\n")
+    fp_id_title.write(docID_title)
+
+    if(len(title) > 0 ) :
+        title = tokenize_string(title)
+    else :
+        title = []
+
+    #Fetching out category from text corpus
+    text = text.split("[[Category:")
+    if len(text) > 1 and len(text[1]) > 0 :
+        category = text[1]
+    else :
+        category = ""
+    text = text[0]
+    category = filter_categories(category)
+
+    #Fetching out reference from text corpus
+    text = text.split("==External links==")
+    if len(text) > 1 and len(text[1]) > 0 :
+        e_links = text[1]
+    else :
+        e_links = ""
+    text = text[0]
+    e_links = filter_external_links(e_links)
+
+    #Fetching out reference from text corpus
+    text = text.split("==References==")
+    if len(text) > 1 and len(text[1]) > 0 :
+        references = text[1]
+    else :
+        references = ""
+    text = text[0]
+    references = filter_references(references)
+
+    #Filtering and tokenizing infobox and text part
+    infobox, text = filter_infobox_text(text)
+
+    #---------------------------------------------------
+    # Filtering is done upto here, now processing will be done to make entery in index
+    #---------------------------------------------------
+    title_count = Counter(title)
+    text_count = Counter(text)
+    infobox_count = Counter(infobox)
+    references_count = Counter(references)
+    e_links_count = Counter(e_links)
+    category_count = Counter(category)
+
+    title_total = sum(list(title_count.values()))
+    text_total = sum(list(text_count.values()))
+    infobox_total = sum(list(infobox_count.values()))
+    references_total = sum(list(references_count.values()))
+    e_links_total = sum(list(e_links_count.values()))
+    category_total = sum(list(category_count.values()))
+    
+    vocabulary = set( list(title_count.keys()) + list(text_count.keys()) + list(infobox_count.keys())
+                      + list(references_count.keys()) + list(e_links_count.keys()) + list(category_count.keys()) )
+
+    for word in vocabulary :
+        string = ""
+        
+        #For title part
+        string += "t"
+        try :
+            temp = title_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, title_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        #For text part
+        string += "x"
+        try :
+            temp = text_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, text_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        #For category part
+        string += "c"
+        try :
+            temp = category_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, category_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        #For external links part
+        string += "e"
+        try :
+            temp = e_links_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, e_links_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        #For references part
+        string += "r"
+        try :
+            temp = references_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, references_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        #For infobox part
+        string += "i"
+        try :
+            temp = infobox_count[word] 
+        except KeyError :
+            temp = 0
+        temp = term_frequency(temp, infobox_total)
+        if temp != "0" :
+            string += temp
+        else :
+            string = string[:-1]
+
+        if total_word_count.get(word[0]) :
+            if total_word_count[word[0]].get(word) :
+                total_word_count[word[0]][word] += (", " + str(count) + ":" + string )
+            else :
+                total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string)
+        else :
+            total_word_count[word[0]] = {}
+            total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string )
+
+    if count % MAX_ALLOWED == 0 :
+        write_time_s = time.time()
+        crr_index = os.path.join(index_dir, str(count//MAX_ALLOWED))
+        # crr_index = index_dir
+
+        if not os.path.isdir(crr_index) :
+            os.mkdir(crr_index) 
+            create_files(crr_index) 
+
+        for k in total_word_count.keys() :
+            js = ""
+            if k in json_file.keys() :
+                js += json_file[k]
+            else :
+                js += special_json
+            js = js[:-4] + "txt"
+            js = os.path.join(crr_index, js)
+            
+            jsf = open(js, 'w')
+            # json.dump(total_word_count[k], jsf)
+            all_words = list(total_word_count[k].keys())
+            all_words.sort()
+            if k == "a" :
+                print(all_words)
+            for word in all_words :
+                jsf.write(total_word_count[k][word] + "\n")
+            jsf.close()
+            total_word_count[k].clear()
+        write_time_e = time.time()
+        print("Iteration number : ", count//MAX_ALLOWED )
+
+
 def filter_words( filename ) :
 
     global total_word_count, count
@@ -496,19 +724,61 @@ def filter_words( filename ) :
 
     # print("Total number of pages are : ", count)
 
-def main() :
+#**************************************************************************************************************
+# Following function will return file pointer to id_to_title.txt file
+#**************************************************************************************************************
+def open_id_title( filename ) :
+
     global index_dir
+
+    ID_title_map = os.path.join(index_dir, filename)
+    idt = open(ID_title_map, "a")
+    
+    return idt
+
+#**************************************************************************************************************
+# Following function will clear the index directory which will have redundant intermediate files in their 
+# iteration folders
+#**************************************************************************************************************
+def clear_directory( itr, directory ) :
+
+    i = 1
+    while i <= itr :
+        dirc = os.path.join(directory, str(i))
+        if not os.path.isdir(dirc) :
+            break 
+        for file in os.listdir(dirc) :
+            file = os.path.join(dirc, file)
+            os.remove(file)
+        os.rmdir(dirc)
+        i += 1
+
+def main() :
+    global index_dir, fp_id_title
     wiki_dump = sys.argv[1]
     index_dir = sys.argv[2]
     
     if not os.path.isdir(index_dir) :
         os.mkdir(index_dir)
 
-    include_text = True
+    parser = xml.sax.make_parser(  )                                  #SAX Parser
+    handler = WikiHandler(  )
+    parser.setContentHandler(handler)
     start = time.time()
-    filter_words(wiki_dump)
+    fp_id_title = open_id_title("id_to_title.txt")
+    parser.parse(wiki_dump)
     write_remaining()
+    print("Number of iterations : ", len(os.listdir(index_dir)))
+    fp_id_title.close()
+    itr = len(os.listdir(index_dir)) - 1
+    print("Number of iterations : ", itr)
+    merge.merge_files(itr, index_dir)
+    clear_directory(653, index_dir)
     end = time.time()
+
+    total_docs = open(os.path.join(index_dir, "total_docs.txt"), "w")
+    total_docs.write(str(nod))
+    total_docs.close()
     print("Time taken : ", end - start)
 
 if __name__ == '__main__' :
