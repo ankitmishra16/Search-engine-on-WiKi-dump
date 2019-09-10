@@ -8,10 +8,10 @@ index_file = {'a' : 'a_index.txt', 'b' : 'b_index.txt', 'c' : 'c_index.txt', 'd'
              'h' : 'h_index.txt', 'i' : 'i_index.txt', 'j' : 'j_index.txt', 'k' : 'k_index.txt', 'l' : 'l_index.txt',
              'm' : 'm_index.txt', 'n' : 'n_index.txt', 'o' : 'o_index.txt', 'p' : 'p_index.txt', 'q' : 'q_index.txt',
              'r' : 'r_index.txt', 's' : 's_index.txt', 't' : 't_index.txt', 'u' : 'u_index.txt', 'v' : 'v_index.txt',
-             'w' : 'w_index.txt', 'x' : 'x_index.txt', 'y' : 'y_index.txt', 'z' : 'z_index.txt', 
+             'w' : 'w_index.txt', 'x' : 'x_index.txt', 'y' : 'y_index.txt', 'z' : 'z_index.txt',# }
              "special" : "special_index.txt"}
 # special_file = 'special_index.txt'
-
+max_file = 20000
 def next_line(fpt) :
 	try :
 		temp = fpt.readline()
@@ -30,11 +30,14 @@ def next_line(fpt) :
 
 def merge_files( iter_count, index_dir ) :
 	alphabets = list(index_file.keys())
+	# alphabets = ["special"]
+	offset_length = open(os.path.join(index_dir, "offset_file_length.txt"),"w") 
 
 	for a in alphabets :
 		line_count = 0
 		# Creating final index files 
-		file = os.path.join(index_dir, index_file[a])
+		filename = index_file[a][:-4] + "_0.txt"
+		file = os.path.join(index_dir, filename)
 		fp = open(file, "w")
 
 		#Creating an offset file to store word with line number on which this word is stored in its first alphabet's
@@ -45,12 +48,15 @@ def merge_files( iter_count, index_dir ) :
 
 		# Storing all the file pointers in file_pointers list to access those files
 		file_pointers = []
+		count = 0
 		for i in range(iter_count) :
 			temp = os.path.join(index_dir, str(i + 1))
 			if os.path.exists(temp) :
 				temp = os.path.join(temp, index_file[a])
 				if os.path.exists(temp) :
 					temp = open(temp, "r")
+					count += 1
+					# print("File opened : ", count)
 					file_pointers.append(temp)
 				else :
 					print("File : ", temp, " does not exist!!!!!!!!!")
@@ -65,25 +71,39 @@ def merge_files( iter_count, index_dir ) :
 			word, posting = next_line(fpt)
 			
 			while word in postings.keys() :
+				if word == '' :
+					break
 				temp = ", "
 				temp += posting
 				postings[word] += temp
 				word, posting = next_line(fpt)
 
-			from_file[word] = file_pointers.index(fpt)
-			postings[word] = posting
-			heap.append(word)
+			if word != "" :
+				from_file[word] = file_pointers.index(fpt)
+				postings[word] = posting
+				heap.append(word)
 			i += 1
 
 		heapq.heapify(heap)
-
 		while len(heap) > 0 :
+			# print(len(heap))
 			word = heapq.heappop(heap)
 			posting = postings[word]
 			pos_list = word + "--->" + posting + "\n"
 			fp.write(pos_list)
 
 			line_count += 1
+			if line_count % max_file == 0 :
+				fp.close()
+				file = filename[:-4]
+				prev = int(file[file.index("index_") + 6 :].strip())
+				file = file[:file.index("index_") + 6 ]
+				prev += 1
+				filename = file + str(prev) + ".txt"
+				file = os.path.join(index_dir, filename)
+				fp = open(file, "w")
+
+
 			off = word + ":" + str(line_count) + "\n"
 			offset.write(off)
 
@@ -111,14 +131,18 @@ def merge_files( iter_count, index_dir ) :
 				# print("Closing : ", ind)
 				# print(list(from_file.values()))
 				# print(file_pointers)
-
+		temp = a + ":" + str(line_count) + "\n"
+		offset_length.write(temp)
+		temp = ""
+		print(a,"_index done!!!")
 
 		offset.close()
 		fp.close()
 		# print("For alphabet '", a, "' merging is done!!!!" )
+	offset_length.close()
 
-# if __name__ == "__main__" :
-# 	s = time.time()
-# 	merge_files(3, "./index" )
-# 	e = time.time()
-# 	print("Time taken : ", e - s)
+if __name__ == "__main__" :
+	s = time.time()
+	merge_files(653, "./index" )
+	e = time.time()
+	print("Time taken : ", e - s)
