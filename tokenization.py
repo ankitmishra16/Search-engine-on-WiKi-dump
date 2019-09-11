@@ -30,12 +30,20 @@ fp_id_title = ""
 nod = 0
 
 #*********************************************************************************************************************
-# Global variables to store word count in documents, 'count' will store count of documents total processed and 
-# 'MAX_ALLOWED' will store number of documents allowed to get written in final index in one go 
+# total_word_count : Global variables to store word count in documents
+# count : 'count' will store count of documents total processed and 
+# MAX_ALLOWED : It will store number of documents allowed to get written in final index in one go 
+# total_itr : it will store number of intermediate folders were created they will be used in clear_directory,
+#            to delete all the intermediate files after merge has been done
+# max_file : Number of lines a file can have, be it offset file, index file or id-to-title file
+# id_to_title : it will store filename of file, which will store mapping of id number to filename
 #*********************************************************************************************************************
 total_word_count = {}
 count = 0
 MAX_ALLOWED = 10000
+total_itr = 0
+max_file = 20000
+id_to_title = "id_to_title_0.txt"
 
 #*********************************************************************************************************************
 # Following dictionary will be used to create index files for words starting from each alphabet, in particular 
@@ -172,9 +180,10 @@ def count_words( text ) :
 #*********************************************************************************************************************
 def write_remaining( ) :
 
-    global total_word_count, count
+    global total_word_count, count, total_itr
 
     if len(total_word_count) > 0 :
+        total_itr += 1
         crr_index = os.path.join(index_dir, str((count//MAX_ALLOWED) + 1))
         # crr_index = index_dir
 
@@ -344,12 +353,20 @@ def term_frequency( occurence_count, total_terms ) :
 #*********************************************************************************************************************
 def createIndex( title, text ) :
 
-    global total_word_count, count, docID_title, fp_id_title
+    global total_word_count, count, docID_title, fp_id_title, total_itr, id_to_title
 
     count += 1
     # print("Doc number", count, "Title passed : ", title)
     docID_title = ( str(count) + ":" + title + "\n")
     fp_id_title.write(docID_title)
+    if count % max_file == 0 :
+        file = id_to_title[:-4]
+        prev = int(file[file.index("title_") + 6 :])
+        prev += 1
+        file = file[:file.index("title_") + 6]
+        id_to_title = file + str(prev) + ".txt"
+        fp_id_title.close()
+        fp_id_title = open_id_title(id_to_title)
 
     if(len(title) > 0 ) :
         title = tokenize_string(title)
@@ -494,6 +511,7 @@ def createIndex( title, text ) :
         write_time_s = time.time()
         crr_index = os.path.join(index_dir, str(count//MAX_ALLOWED))
         # crr_index = index_dir
+        total_itr += 1
 
         if not os.path.isdir(crr_index) :
             os.mkdir(crr_index) 
@@ -512,8 +530,8 @@ def createIndex( title, text ) :
             # json.dump(total_word_count[k], jsf)
             all_words = list(total_word_count[k].keys())
             all_words.sort()
-            if k == "a" :
-                print(all_words)
+            # if k == "a" :
+            #     print(all_words)
             for word in all_words :
                 jsf.write(total_word_count[k][word] + "\n")
             jsf.close()
@@ -521,208 +539,6 @@ def createIndex( title, text ) :
         write_time_e = time.time()
         print("Iteration number : ", count//MAX_ALLOWED )
 
-
-def filter_words( filename ) :
-
-    global total_word_count, count
-
-    tree = et.parse(filename)
-    root = tree.getroot()
-
-    count = 0
-    docID_title = ""
-
-    for child in root :
-        ind = child.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
-        sc = child.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :]
-        if sc == 'page' :
-            start = time.time()
-            count += 1
-            data = {}
-            title = ""
-            for sch in child :
-                ind = sch.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
-                sc = sch.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :]
-                sc.strip()
-                if(sc == 'title') :
-                    title = str(sch.text)
-                    docID_title += ( str(count) + ":" + title + "\n")
-                    if(len(title) > 0 ) :
-                        title = tokenize_string(title)
-                    else :
-                        title = []
-
-                
-                elif(sc == 'revision' ) :
-                    for schh in sch :
-                        ind = schh.tag.find('{http://www.mediawiki.org/xml/export-0.10/}')
-                        sc = schh.tag[ind + len('{http://www.mediawiki.org/xml/export-0.10/}') :].strip()
-                        if sc == 'text' :
-                            text = str(schh.text)
-                            
-                            #Fetching out category from text corpus
-                            text = text.split("[[Category:")
-                            if len(text) > 1 and len(text[1]) > 0 :
-                                category = text[1]
-                            else :
-                                category = ""
-                            text = text[0]
-                            category = filter_categories(category)
-
-                            #Fetching out reference from text corpus
-                            text = text.split("==External links==")
-                            if len(text) > 1 and len(text[1]) > 0 :
-                                e_links = text[1]
-                            else :
-                                e_links = ""
-                            text = text[0]
-                            e_links = filter_external_links(e_links)
-
-                            #Fetching out reference from text corpus
-                            text = text.split("==References==")
-                            if len(text) > 1 and len(text[1]) > 0 :
-                                references = text[1]
-                            else :
-                                references = ""
-                            text = text[0]
-                            references = filter_references(references)
-
-                            #Filtering and tokenizing infobox and text part
-                            infobox, text = filter_infobox_text(text)
-
-            title_count = count_words(title)
-            text_count = count_words(text)
-            infobox_count = count_words(infobox)
-            references_count = count_words(references)
-            e_links_count = count_words(e_links)
-            category_count = count_words(category)
-
-            title_total = len(title_count)
-            text_total = len(text_count)
-            infobox_total = len(infobox_count)
-            references_total = len(references_count)
-            e_links_total = len(e_links_count)
-            category_total = len(category_count)
-            
-            vocabulary = set( list(title_count.keys()) + list(text_count.keys()) + list(infobox_count.keys())
-                              + list(references_count.keys()) + list(e_links_count.keys()) + list(category_count.keys()) )
-
-            for word in vocabulary :
-                string = ""
-                
-                #For title part
-                string += "t"
-                try :
-                    temp = title_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, title_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                #For text part
-                string += "x"
-                try :
-                    temp = text_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, text_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                #For category part
-                string += "c"
-                try :
-                    temp = category_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, category_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                #For external links part
-                string += "e"
-                try :
-                    temp = e_links_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, e_links_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                #For references part
-                string += "r"
-                try :
-                    temp = references_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, references_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                #For infobox part
-                string += "i"
-                try :
-                    temp = infobox_count[word] 
-                except KeyError :
-                    temp = 0
-                temp = term_frequency(temp, infobox_total)
-                if temp != "0" :
-                    string += temp
-                else :
-                    string = string[:-1]
-
-                if total_word_count.get(word[0]) :
-                    if total_word_count[word[0]].get(word) :
-                        total_word_count[word[0]][word] += (", " + str(count) + ":" + string )
-                    else :
-                        total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string)
-                else :
-                    total_word_count[word[0]] = {}
-                    total_word_count[word[0]][word] = word + "--->" + str(str(count) + ":" + string )
-
-            if count % MAX_ALLOWED == 0 :
-                write_time_s = time.time()
-                # crr_index = os.path.join(index_dir, str(count//MAX_ALLOWED))
-                crr_index = index_dir
-
-                if not os.path.isdir(crr_index) :
-                    os.mkdir(crr_index) 
-                    create_files(crr_index) 
-
-                for k in total_word_count.keys() :
-                    js = ""
-                    if k in json_file.keys() :
-                        js += json_file[k]
-                    else :
-                        js += special_json
-                    js = js[:-4] + "txt"
-                    js = os.path.join(crr_index, js)
-                    
-                    jsf = open(js, 'w')
-                    # json.dump(total_word_count[k], jsf)
-                    for word in total_word_count[k].keys() :
-                        jsf.write(total_word_count[k][word] + "\n")
-                    jsf.close()
-                    total_word_count[k].clear()
-                write_time_e = time.time()
-                # print("Time taken to write : ", write_time_e - write_time_s )
-    ID_title_map = os.path.join(index_dir, "id_to_title.txt")
-    idt = open(ID_title_map, "w")
-    idt.write(docID_title)
-    idt.close()
-
-    # print("Total number of pages are : ", count)
 
 #**************************************************************************************************************
 # Following function will return file pointer to id_to_title.txt file
@@ -754,7 +570,7 @@ def clear_directory( itr, directory ) :
         i += 1
 
 def main() :
-    global index_dir, fp_id_title
+    global index_dir, fp_id_title, max_file
     wiki_dump = sys.argv[1]
     index_dir = sys.argv[2]
     
@@ -765,20 +581,24 @@ def main() :
     handler = WikiHandler(  )
     parser.setContentHandler(handler)
     start = time.time()
-    fp_id_title = open_id_title("id_to_title.txt")
+    fp_id_title = open_id_title(id_to_title)
     parser.parse(wiki_dump)
     write_remaining()
-    print("Number of iterations : ", len(os.listdir(index_dir)))
+    # print("Number of iterations : ", len(os.listdir(index_dir)))
     fp_id_title.close()
-    itr = len(os.listdir(index_dir)) - 1
-    print("Number of iterations : ", itr)
-    merge.merge_files(itr, index_dir)
-    clear_directory(653, index_dir)
+    # itr = len(os.listdir(index_dir)) - 1
+    # print("Number of iterations : ", itr)
+    merge.merge_files(total_itr, index_dir, max_file)
+    clear_directory(total_itr, index_dir)
     end = time.time()
 
     total_docs = open(os.path.join(index_dir, "total_docs.txt"), "w")
     total_docs.write(str(nod))
     total_docs.close()
+
+    # total_folders = open(os.path.join(index_dir, "total_folders.txt"), "w")
+    # total_folders.write(str(total_itr))
+    # total_folders.close()
     print("Time taken : ", end - start)
 
 if __name__ == '__main__' :
