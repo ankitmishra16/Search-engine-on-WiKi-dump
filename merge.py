@@ -11,7 +11,7 @@ index_file = {'a' : 'a_index.txt', 'b' : 'b_index.txt', 'c' : 'c_index.txt', 'd'
              'w' : 'w_index.txt', 'x' : 'x_index.txt', 'y' : 'y_index.txt', 'z' : 'z_index.txt',# }
              "special" : "special_index.txt"}
 # special_file = 'special_index.txt'
-max_file = 20000
+max_file = 0
 def next_line(fpt) :
 	try :
 		temp = fpt.readline()
@@ -28,7 +28,10 @@ def next_line(fpt) :
 		word, posting = "", ""
 	return word, posting
 
-def merge_files( iter_count, index_dir ) :
+def merge_files( iter_count, index_dir, max_file_length ) :
+	global max_file
+
+	max_file = max_file_length
 	alphabets = list(index_file.keys())
 	# alphabets = ["special"]
 	offset_length = open(os.path.join(index_dir, "offset_file_length.txt"),"w") 
@@ -42,8 +45,8 @@ def merge_files( iter_count, index_dir ) :
 
 		#Creating an offset file to store word with line number on which this word is stored in its first alphabet's
 		# index file
-		offset = a + "_offset.txt"
-		offset = os.path.join(index_dir, offset)
+		offset_file = a + "_offset_0.txt"
+		offset = os.path.join(index_dir, offset_file)
 		offset = open(offset, "w")
 
 		# Storing all the file pointers in file_pointers list to access those files
@@ -103,6 +106,14 @@ def merge_files( iter_count, index_dir ) :
 				file = os.path.join(index_dir, filename)
 				fp = open(file, "w")
 
+				offset.close()
+				off = offset_file[:-4]
+				prev = int(off[off.index("offset_") + 7 :].strip())
+				off = off[:off.index("offset_") + 7].strip()
+				prev += 1
+				offset_file = off + str(prev) + ".txt"
+				offset = os.path.join(index_dir, offset_file)
+				offset = open(offset, "w")
 
 			off = word + ":" + str(line_count) + "\n"
 			offset.write(off)
@@ -143,6 +154,6 @@ def merge_files( iter_count, index_dir ) :
 
 if __name__ == "__main__" :
 	s = time.time()
-	merge_files(653, "./index" )
+	merge_files(653, "./index", 20000 )
 	e = time.time()
 	print("Time taken : ", e - s)
