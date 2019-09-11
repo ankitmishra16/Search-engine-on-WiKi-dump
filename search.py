@@ -6,7 +6,7 @@ import time
 
 path_to_index = ""
 field_multiplier = 11
-
+max_file = 20000
 #*****************************************************************************************************************
 # Following dictionary will store count of lines in offset files, will be used while binary search
 #*****************************************************************************************************************
@@ -180,40 +180,94 @@ def getline(filename, line_number ) :
 # keyed on line number value will be line, and list line_numbers should be sorted, because we search for line, from
 # front to rear end sequentially, and we have to featch all the line in on go of file
 #********************************************************************************************************************
-def getlines(filename, line_numbers) :
-    fp = open(filename)
-    i = 0
+def get_titles(title_ids) :
+    
+    global path_to_index
     ret = {}
-    line = "" 
-    number = line_numbers[i]
-    count = 0
-    for line in fp :    
-        count += 1
-        if count == number :
-            ret[number] = line 
-            i += 1
-            if i < len(line_numbers) :
-                number = line_numbers[i]
-            else :
-                break
-    fp.close()
-    if len(ret) < len(line_numbers) :
-        print("Less lines were returned")
+    id_file = {}
+
+    for ids in title_ids :
+        file = ids // max_file
+        if file in id_file.keys() :
+            id_file[file].append(ids)
+        else :
+            id_file[file] = [ids]
+
+    for file in id_file.keys() :
+        print("id_to_title file number : ", file)
+        filename = "id_to_title_" + str(file) + ".txt"
+        fp = open(os.path.join(path_to_index, filename), "r")
+        for ids in id_file[file] :
+            print("Id in search : ", ids)
+            # ids = ids.strip()
+            run = True
+            while run :
+                line = fp.readline()
+                num = int(line[:line.index(":")])
+                if num == ids :
+                    run = False
+                    ret[num] = line[line.index(":") + 1 :]
+        fp.close()
     return ret
+
 
 #******************************************************************************************************************
 # Following function will perform external binary search on the offset file, whose address id passed as 'filename'
 # parameter we will open file count lines and then will perform binary search on the file
 #******************************************************************************************************************
-def binary_search(filename, alphabet, search_words) :
-    
+def binary_search(alphabet, search_words) :
+    global path_to_index
+
+    search_words.sort()
     ret = []
     # print("Binary search for : ", search_words)
     no_lines = offset_line_count[alphabet]
     for search_word in search_words :
+
+        file_found = False
+        file = ""
+        offset_file_1 = alphabet + "_offset_0.txt"
+        off1 = open(os.path.join(path_to_index, offset_file_1), "r")
+
+        offset_file_2 = alphabet + "_offset_1.txt"
+        if os.path.exists(os.path.join(path_to_index, offset_file_2)) :
+            off2 = open(os.path.join(path_to_index, offset_file_2), "r")
+        else :
+            file_found = True
+            file = off1
+
+        # word_1 = off1.readline()
+        # word_1 = word_1[word_1.index(":") :]
+
+        while not file_found :
+            
+            word_2 = off2.readline()
+            word_2 = word_2[:word_2.index(":")]
+
+            if search_word < word_2 :
+                file_found = True
+                file = off1
+                filename = offset_file_1
+            else :
+                # print("Search word : ", search_word, ", word_2 : ", word_2)
+                off1.close()
+                off1 = off2
+                offset_file_1 = offset_file_2
+                off2 = offset_file_2[:-4]
+                offset_file_2 = off2[:off2.index("offset_") + 7 ]
+                prev = int(off2[off2.index("offset_") + 7 :])
+                prev += 1
+                offset_file_2 = offset_file_2 + str(prev) + ".txt"
+                if os.path.exists(os.path.join(path_to_index, offset_file_2)) :
+                    off2 = open(os.path.join(path_to_index, offset_file_2), "r")
+                else :
+                    file_found = True
+                    file = off1
+                    filename = offset_file_1
         s = 1
-        e = no_lines 
+        e = max_file - 1
         ret_no = ""
+        filename = os.path.join(path_to_index, filename)
         # print("Current word : ", search_word)
         # print("Start : ", s, ", End : ", e)
         while s < e :
@@ -226,6 +280,7 @@ def binary_search(filename, alphabet, search_words) :
             if word == search_word :
                 # print("Found")
                 ret_no = int(line[line.index(":") + 1 : ].strip())
+                # print("Line number found : ", ret_no)
                 break
             elif word < search_word :
                 s = mid + 1
@@ -236,7 +291,9 @@ def binary_search(filename, alphabet, search_words) :
             line = getline(filename, s)
             word = line[:line.index(":")]
             if word == search_word :
+                # print("Found")
                 ret_no = int(line[line.index(":") + 1 : ].strip())
+                # print("Line number found : ", ret_no)
 
         ret.append(ret_no)
 
@@ -281,12 +338,13 @@ def return_postings(query, field) :
             filename = special_index
 
         alphabetwise_query_words = list(set(alpha_words[alphabet]))
-        offset_file = os.path.join(path_to_index, alphabet + "_offset.txt")
-        line_numbers = binary_search(offset_file, alphabet, alphabetwise_query_words)
+        # offset_file = os.path.join(path_to_index, alphabet + "_offset.txt")
+        line_numbers = binary_search( alphabet, alphabetwise_query_words)
         # print("Returned line numbers : ", line_numbers)
 
         i = 0
         for line_n in line_numbers :
+            print("Line number : ", line_n)
             # line = linecache.getline(filename, line_n)
             num = line_n // 20000
             line_n = line_n % 20000
@@ -409,16 +467,16 @@ def search(path_to_index, queries):
                 doc_IDs.append(int(d_id))
             i += 1
 
-        id_to_title = os.path.join(path_to_index, "id_to_title.txt")
+        # id_to_title = os.path.join(path_to_index, "id_to_title.txt")
         print("Doc IDs to return : ", doc_IDs)
         sorted_docIDs = doc_IDs
         sorted_docIDs.sort()
-        lines = getlines(id_to_title, sorted_docIDs)
+        lines = get_titles(sorted_docIDs)
         for ids in doc_IDs :
             line = lines[ids]
             # line = getline(id_to_title, int(ids)).strip()
-            temp_output.append(line[line.index(":") + 1 :])
-            print("Appended doc : ", line[line.index(":") + 1 :])
+            temp_output.append(line)
+            print("Appended doc : ", line)
 
         final_output.append(temp_output)
         temp_output = []
