@@ -28,16 +28,16 @@ special_index = "special_index.txt"
 # Following code will initialize offset_line_count dictionary which will be keyed on alphabet of whose offset file
 # is being accessed and value will be number of lines that offset file has 
 #******************************************************************************************************************
-def init_offset_count() :
-    global path_to_index, offset_line_count
-    offset = os.path.join(path_to_index, "offset_file_length.txt")
-    print("File address is : ", offset)
-    offset = open(offset, "r")
-    for line in offset :
-        alpha = line[:line.index(":"):]
-        offset_line_count[alpha] = int(line[line.index(":") + 1 :])
+# def init_offset_count() :
+#     global path_to_index, offset_line_count
+#     offset = os.path.join(path_to_index, "offset_file_length.txt")
+#     # print("File address is : ", offset)
+#     offset = open(offset, "r")
+#     for line in offset :
+#         alpha = line[:line.index(":"):]
+#         offset_line_count[alpha] = int(line[line.index(":") + 1 :])
 
-    offset.close()
+#     offset.close()
 
 
 #********************************************************************************************************************
@@ -131,7 +131,7 @@ def get_field_value( value, field ) :
 def relevance_dictionary( posting, field, word_weight ) :
     
     posting_values = posting.split(",")
-    print(len(posting_values))
+    # print("Number of postings : ", len(posting_values))
     ret = {}
     idf = math.log(total_num_docs//len(posting_values))
 
@@ -194,11 +194,11 @@ def get_titles(title_ids) :
             id_file[file] = [ids]
 
     for file in id_file.keys() :
-        print("id_to_title file number : ", file)
+        # print("id_to_title file number : ", file)
         filename = "id_to_title_" + str(file) + ".txt"
         fp = open(os.path.join(path_to_index, filename), "r")
         for ids in id_file[file] :
-            print("Id in search : ", ids)
+            # print("Id in search : ", ids)
             # ids = ids.strip()
             run = True
             while run :
@@ -221,7 +221,7 @@ def binary_search(alphabet, search_words) :
     search_words.sort()
     ret = []
     # print("Binary search for : ", search_words)
-    no_lines = offset_line_count[alphabet]
+    # no_lines = offset_line_count[alphabet]
     for search_word in search_words :
 
         file_found = False
@@ -344,7 +344,7 @@ def return_postings(query, field) :
 
         i = 0
         for line_n in line_numbers :
-            print("Line number : ", line_n)
+            # print("Line number : ", line_n)
             # line = linecache.getline(filename, line_n)
             num = line_n // 20000
             line_n = line_n % 20000
@@ -352,6 +352,7 @@ def return_postings(query, field) :
             filename = os.path.join(path_to_index, filename)
             line = getline(filename, line_n)
             posting = line[line.index(">") + 1 :]
+            # print("Got the line of size : ", len(posting))
             temp_dict = relevance_dictionary(posting, field, query_word_weight[alphabetwise_query_words[i]])
             doc_rel_dict = merge_dicts(doc_rel_dict, temp_dict)
             i += 1
@@ -362,144 +363,159 @@ def return_postings(query, field) :
 # Following function will be first function to be called for search, it will further check if it is feild query or
 # normal query and then accordingly call the appropriate functions 
 #********************************************************************************************************************
-def search(path_to_index, queries):
+def search(path_to_index, query):
     final_output = []
     temp_output = []
 
-    for q in queries :
-        title, text, category, references, external, info, all_s = "", "", "", "", "", "", ""
-        query_words = re.findall("\d+|[\w|:]+", q)
+    # for q in queries :
+    title, text, category, references, external, info, all_s = "", "", "", "", "", "", ""
+    query_words = re.findall("\d+|[\w|:]+", query)
 
-        for word in query_words :
-            # print("\nWord : ", word)
-            if "title:" in word :
-                # print("word has title : ", word[6:])
-                title += (word[6:] + " ") 
-            elif "body:" in word :
-                # print("Word has body : ", word[5:])
-                text += (word[5:] + " ")
-            elif "infobox:" in word :
-                # print("Word has infobox : ", word[8:])
-                info += (word[8:] + " ")
-            elif "category:" in word :
-                # print("Word has category : ", word[9:])
-                category += (word[9:] + " ")
-            elif "ref:" in word :
-                # print("Word has ref : ", word[4:])
-                references += (word[4:] + " ")
-            elif "ext:" in word :
-                # print("Word has ext : ", word[4:])
-                external += (word[4:] + " ")
-            else :
-                # print("Word has no field query")
-                all_s += (word + " ")
-
-        if len(title) > 0 :
-            title = return_postings(title, "t")
+    for word in query_words :
+        # print("\nWord : ", word)
+        if "title:" in word :
+            # print("word has title : ", word[6:])
+            title += (word[6:] + " ") 
+        elif "body:" in word :
+            # print("Word has body : ", word[5:])
+            text += (word[5:] + " ")
+        elif "infobox:" in word :
+            # print("Word has infobox : ", word[8:])
+            info += (word[8:] + " ")
+        elif "category:" in word :
+            # print("Word has category : ", word[9:])
+            category += (word[9:] + " ")
+        elif "ref:" in word :
+            # print("Word has ref : ", word[4:])
+            references += (word[4:] + " ")
+        elif "ext:" in word :
+            # print("Word has ext : ", word[4:])
+            external += (word[4:] + " ")
         else :
-            title = {}
-        if len(text) > 0 :
-            text = return_postings(text, "x")
+            # print("Word has no field query")
+            all_s += (word + " ")
+
+    if len(title) > 0 :
+        title = return_postings(title, "t")
+    else :
+        title = {}
+    if len(text) > 0 :
+        text = return_postings(text, "x")
+    else :
+        text = {}
+    if len(category) > 0 :
+        category = return_postings(category, "c")
+    else :
+        category = {}
+    if len(references) > 0 :
+        references = return_postings(references, "r")
+    else :
+        references = {}
+    if len(external) > 0 :
+        external = return_postings(external, "e")
+    else :
+        external = {}
+    if len(info) > 0 :
+        info = return_postings(info, "i")
+    else :
+        info = {}
+    if len(all_s) > 0 :
+        all_s = return_postings(all_s, "a")
+    else :
+        all_s = {}
+
+    total_docs = set(list(title.keys()) + list(text.keys()) + list(category.keys()) + list(references.keys()) +
+                     list(external.keys()) + list(info.keys()) + list(all_s.keys()) )
+
+    final_rel_doc = {}
+    final_rel_l = []
+    for doc in total_docs :
+        score = 0
+        if doc in title.keys() :
+            score += title[doc]
+
+        if doc in text.keys() :
+            score += text[doc]
+
+        if doc in category.keys() :
+            score += category[doc]
+
+        if doc in references.keys() :
+            score += references[doc]
+
+        if doc in external.keys() :
+            score += external[doc]
+
+        if doc in info.keys() :
+            score += info[doc]
+
+        if doc in all_s.keys() :
+            score += all_s[doc]
+
+        if score not in final_rel_l :
+            final_rel_l.append(score)
+            final_rel_doc[score] = [doc]
         else :
-            text = {}
-        if len(category) > 0 :
-            category = return_postings(category, "c")
-        else :
-            category = {}
-        if len(references) > 0 :
-            references = return_postings(references, "r")
-        else :
-            references = {}
-        if len(external) > 0 :
-            external = return_postings(external, "e")
-        else :
-            external = {}
-        if len(info) > 0 :
-            info = return_postings(info, "i")
-        else :
-            info = {}
-        if len(all_s) > 0 :
-            all_s = return_postings(all_s, "a")
-        else :
-            all_s = {}
+            final_rel_doc[score].append(doc)
 
-        total_docs = set(list(title.keys()) + list(text.keys()) + list(category.keys()) + list(references.keys()) +
-                         list(external.keys()) + list(info.keys()) + list(all_s.keys()) )
+    final_rel_l.sort()
+    final_rel_l.reverse()
+    count = min(10, len(final_rel_l))
+    doc_IDs = []
+    i = 0
+    while len(doc_IDs) < 10 and len(final_rel_l) > i : 
+        for d_id in final_rel_doc[final_rel_l[i]] :
+            doc_IDs.append(int(d_id))
+            if len(doc_IDs) >= 10 :
+                break 
+        i += 1
 
-        final_rel_doc = {}
-        final_rel_l = []
-        for doc in total_docs :
-            score = 0
-            if doc in title.keys() :
-                score += title[doc]
+    # id_to_title = os.path.join(path_to_index, "id_to_title.txt")
+    # print("Doc IDs to return : ", doc_IDs)
+    sorted_docIDs = doc_IDs
+    sorted_docIDs.sort()
+    lines = get_titles(sorted_docIDs)
+    for ids in doc_IDs :
+        line = lines[ids]
+        # line = getline(id_to_title, int(ids)).strip()
+        temp_output.append(line)
+        # print("Appended doc : ", line)
 
-            if doc in text.keys() :
-                score += text[doc]
-
-            if doc in category.keys() :
-                score += category[doc]
-
-            if doc in references.keys() :
-                score += references[doc]
-
-            if doc in external.keys() :
-                score += external[doc]
-
-            if doc in info.keys() :
-                score += info[doc]
-
-            if doc in all_s.keys() :
-                score += all_s[doc]
-
-            if score not in final_rel_l :
-                final_rel_l.append(score)
-                final_rel_doc[score] = [doc]
-            else :
-                final_rel_doc[score].append(doc)
-
-        final_rel_l.sort()
-        final_rel_l.reverse()
-        count = min(10, len(final_rel_l))
-        doc_IDs = []
-        i = 0
-        while len(doc_IDs) < 10 : 
-            for d_id in final_rel_doc[final_rel_l[i]] :
-                doc_IDs.append(int(d_id))
-            i += 1
-
-        # id_to_title = os.path.join(path_to_index, "id_to_title.txt")
-        print("Doc IDs to return : ", doc_IDs)
-        sorted_docIDs = doc_IDs
-        sorted_docIDs.sort()
-        lines = get_titles(sorted_docIDs)
-        for ids in doc_IDs :
-            line = lines[ids]
-            # line = getline(id_to_title, int(ids)).strip()
-            temp_output.append(line)
-            print("Appended doc : ", line)
-
-        final_output.append(temp_output)
-        temp_output = []
-
-    return final_output
+    # final_output.append(temp_output)
+    # temp_output = []
+    if len(temp_output) == 0 :
+        temp_output.append("----NO RESULT FOUND----")
+        
+    return temp_output
 
 
 def main():
     global path_to_index, total_num_docs
     path_to_index = sys.argv[1]
-    testfile = sys.argv[2]
-    path_to_output = sys.argv[3]
+    # testfile = sys.argv[2]
+    # path_to_output = sys.argv[3]
 
-    s = time.time()
-    init_offset_count()
-    queries = read_file(testfile)
     fp = open(os.path.join(path_to_index, "total_docs.txt"), "r")
     total_num_docs = int(fp.readline().strip())
     fp.close()
-    outputs = search(path_to_index, queries)
-    write_file(outputs, path_to_output)
-    e = time.time()
-    print("TIme taken : ", e - s)
+
+    q = 0
+    while not q :
+        print(chr(27) + "[2J")
+        print("\033[%d;%dH" % (0, 0))
+        query = input("Query : ")
+        s = time.time()
+        # init_offset_count()
+        # queries = read_file(testfile)
+        
+        outputs = search(path_to_index, query)
+        print("********************************Results********************************")
+        for result in outputs : 
+            print(result.strip())
+        # write_file(outputs, path_to_output)
+        e = time.time()
+        print("TIme taken : ", e - s)
+        q = int(input("Want to exit(0 for no / 1 for yes) : "))
 
 if __name__ == '__main__':
     main()
