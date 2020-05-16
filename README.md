@@ -6,7 +6,7 @@ This respository contains code of making an efficient search engine on WIki dump
  
  To run tokenization.py we have to run following command :
  
- "python3 tokenization.py wiki_dump_address index_dir_address"
+    python3 tokenization.py wiki_dump_address index_dir_address
  
  Where,
  
@@ -23,7 +23,7 @@ merge.py is a file which have all the code for meging all the intermediate file,
   
   To run search.py we have to run following command :
   
-  "python3 search.py index_dir_address"
+       python3 search.py index_dir_address
   
   Where,
   
